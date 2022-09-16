@@ -16,6 +16,15 @@
     <link rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
     <!-- Theme style -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+
+    <script src="https://cdn.anychart.com/releases/8.8.0/js/anychart-core.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/8.8.0/js/anychart-graph.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/8.8.0/js/anychart-data-adapter.min.js"></script>
+    <style>
+        #sna > div{
+            position: absolute !important;
+        }
+    </style>
 </head>
 <!--
 `body` tag options:
@@ -106,12 +115,8 @@
                                 <div class="card-body">
                                     <div class="form-group">
                                         <label>Kata Kunci</label>
-                                        <input type="text" name="keyword" class="form-control" placeholder="Kata Kunci">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Jumlah Tweet</label>
-                                        <input type="text" name="tweet_count" class="form-control"
-                                               placeholder="Jumlah Tweet">
+                                        <input type="text" name="keyword" class="form-control"
+                                               placeholder="Keyword (Optional)">
                                     </div>
                                     <div class="form-group">
                                         <label>Tanggal Mulai</label>
@@ -133,7 +138,7 @@
                         <!-- /.card -->
                     </div>
                 </div>
-                {% if status %}
+                {% if output_data is not false %}
                 <div class="row">
                     <div class="col-md-6">
                         <!-- SENTIMEN CHART -->
@@ -188,8 +193,8 @@
                                     <thead>
                                     <tr>
                                         <th>#</th>
-                                        <th>Username</th>
                                         <th>URL</th>
+                                         <th>Prediction</th>
                                         <th>Like</th>
                                         <th>RT</th>
                                     </tr>
@@ -198,11 +203,11 @@
                                     {% for data in output_data.most_retweet %}
                                     <tr>
                                         <td>{{ loop.index }}</td>
-                                        <td>{{ data[0] }}</td>
                                         <td>
-                                            <a href="{{ data[1] }}" target="_blank" class="btn bg-gradient-warning btn-sm"><i
+                                            <a href="{{ data[0] }}" target="_blank" class="btn bg-gradient-warning btn-sm"><i
                                                     class="fas fa-eye"></i></a>
                                         </td>
+                                        <td>{{ data[1] }}</td>
                                         <td>{{ data[2] }}</td>
                                          <td>{{ data[3] }}</td>
                                     </tr>
@@ -212,6 +217,21 @@
                             </div>
                             <!-- /.card-body -->
                         </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <!-- SNA -->
+                        <div class="card card-danger">
+                            <div class="card-header" style="z-index: 100">
+                                <h3 class="card-title">SNA</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="sna" style="min-height:400px"></div>
+                            </div>
+                            <!-- /.card-body -->
+                        </div>
+                        <!-- /.card -->
                     </div>
                 </div>
                 {% endif %}
@@ -263,6 +283,7 @@
 <script src="https://cdn.amcharts.com/lib/4/charts.js"></script>
 <script src="https://cdn.amcharts.com/lib/4/plugins/wordCloud.js"></script>
 <script src="https://cdn.amcharts.com/lib/4/themes/animated.js"></script>
+<script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function () {
         $(".date").datepicker({
@@ -270,7 +291,7 @@
         });
     });
 </script>
-{% if status %}
+{% if output_data is not false %}
 <script>
     am4core.useTheme(am4themes_animated);
 
@@ -355,7 +376,32 @@
             }
         }
     });
+</script>
+<script>
+      anychart.onDocumentReady(function () {
+        anychart.data.loadJsonFile("{{ url_for('static', filename='sna.json') }}", function (data) {
+        // create a chart from the loaded data
+        var chart = anychart.graph(data);
+        // set the title
+        chart.title("Network Graph Tweet");
+        // draw the chart
+        var nodes = chart.nodes();
+        nodes.normal().height(30);
+        chart.nodes().labels().enabled(true);
+        nodes.normal().fill("#ffa000");
 
+        chart.container("sna").draw();
+        });
+      });
+    </script>
+{% endif %}
+{% if output_data is false %}
+<script>
+    Swal.fire({
+      icon: 'error',
+      title: 'Oops...',
+      text: 'Kata kunci tidak ditemukan!',
+    })
 </script>
 {% endif %}
 </body>

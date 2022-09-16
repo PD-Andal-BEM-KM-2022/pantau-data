@@ -1,7 +1,8 @@
 # save this as app.py
+import requests
 from flask import Flask, request, render_template, url_for
 import re
-import numpy as np
+from datetime import date, timedelta
 import pandas as pd
 import community
 import pandas as pd
@@ -18,13 +19,15 @@ from sklearn import svm
 from sklearn.metrics import accuracy_score
 import ssl
 import json
+
 try:
-     _create_unverified_https_context =     ssl._create_unverified_context
+    _create_unverified_https_context = ssl._create_unverified_context
 except AttributeError:
-     pass
+    pass
 else:
     ssl._create_default_https_context = _create_unverified_https_context
 import nltk
+
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 from nltk.probability import FreqDist
@@ -43,7 +46,7 @@ from wordcloud import WordCloud
 app = Flask(__name__)
 PATH = os.getcwd()
 
-alay_dict = pd.read_csv(PATH+'/riset-digital/dataset/new_kamusalay.csv', encoding='latin-1', header=None)
+alay_dict = pd.read_csv(PATH + '/riset-digital/dataset/new_kamusalay.csv', encoding='latin-1', header=None)
 alay_dict = alay_dict.rename(columns={0: 'original',
                                       1: 'replacement'})
 stopwords_id = stopwords.words('indonesian')
@@ -52,6 +55,7 @@ stopwords_en = stopwords.words('english')
 tt = TweetTokenizer()
 
 model = 0
+
 
 def tokenize_tweet(text):
     return " ".join(tt.tokenize(text))
@@ -67,12 +71,12 @@ def remove_unnecessary_char(text):
 
 def preprocess_tweet(text):
     text = re.sub('\n', ' ', text)  # Remove every '\n'
-    # text = re.sub('rt',' ',text) # Remove every retweet symbol
+    text = re.sub('rt ', ' ', text)  # Remove every retweet symbol
     text = re.sub('^(\@\w+ ?)+', ' ', text)
     text = re.sub(r'\@\w+', ' ', text)  # Remove every username
     text = re.sub('((www\.[^\s]+)|(https?://[^\s]+)|(http?://[^\s]+))', ' ', text)  # Remove every URL
     text = re.sub('/', ' ', text)
-    # text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'[^\w\s]', '', text)
     text = re.sub('  +', ' ', text)  # Remove extra spaces
     return text
 
@@ -82,10 +86,13 @@ alay_dict_map.update({  # add some specific dictionary here
     # "pks"   : "pencegahan kekerasan seksual",
     # "p-ks"  : "pencegahan kekerasan seksual",
     # "pkl"    : "pedagang kaki lima"
+    "jogja": "yogyakarta",
+    "jogya": "yogyakarta"
 })
 
 
 def normalize_alay(text):
+    return ' '.join([alay_dict_map[word] if word in alay_dict_map else word for word in text.split(' ')])
     return ' '.join([alay_dict_map[word] if word in alay_dict_map else word for word in text.split(' ')])
 
 
@@ -113,141 +120,164 @@ def preprocess(text, alay=False, tweet=False):
     return text
 
 
+def remove_duplicate(list1, list2):
+    set_1 = set(list1)
+    set_2 = set(list2)
+
+    list_2_items_not_in_list_1 = list(set_2 - set_1)
+    combined_list = list1 + list_2_items_not_in_list_1
+
+    return combined_list
+
+
 # Cleaning the tweets
 def clean_tweet(text):
-  df_clean = pd.DataFrame()
-  df_clean['tweet'] = text
-  # p.set_options(p.OPT.MENTION, p.OPT.EMOJI, p.OPT.HASHTAG, p.OPT.RESERVED, p.OPT.SMILEY, p.OPT.URL)
-  # clean_text = [p.clean(a) for a in text.apply(str)]
-  # # print(clean_text[:10])
-  # df_clean['clean'] = clean_text
-  # df_clean["sliced_text"] = [s[r[0]:r[1]] for s,r in zip(df_clean["full_text"], df_clean["display_text_range"])]
-  clean_text = df_clean['tweet'].apply(str).apply(preprocess, args = (True,True,))
-  df_clean['clean'] = clean_text.replace("[^a-zA-Z#]", " ")
-  df_clean['no_stopword_text'] = clean_text.apply(remove_nonaplhanumeric).apply(remove_stopword)
+    df_clean = pd.DataFrame()
+    df_clean['tweet'] = text
+    # p.set_options(p.OPT.MENTION, p.OPT.EMOJI, p.OPT.HASHTAG, p.OPT.RESERVED, p.OPT.SMILEY, p.OPT.URL)
+    # clean_text = [p.clean(a) for a in text.apply(str)]
+    # # print(clean_text[:10])
+    # df_clean['clean'] = clean_text
+    # df_clean["sliced_text"] = [s[r[0]:r[1]] for s,r in zip(df_clean["full_text"], df_clean["display_text_range"])]
+    clean_text = df_clean['tweet'].apply(str).apply(preprocess, args=(True, True,))
+    # df_clean['clean'] = clean_text.replace("[^a-zA-Z#]", " ")
+    # df_clean['no_stopword_text'] = clean_text.apply(remove_nonaplhanumeric).apply(remove_stopword)
+    df_clean['clean_text'] = clean_text.apply(remove_nonaplhanumeric).apply(remove_stopword)
 
-  return(df_clean[['clean', 'no_stopword_text']])
+    # return(df_clean[['clean', 'no_stopword_text']])
+    return (df_clean['clean_text'])
 
-def create_model():
-    # Start Create Model
-    train = pd.read_csv(PATH + '/indonlu/dataset/emot_emotion-twitter/train_preprocess.csv')
-    test = pd.read_csv(PATH + '/indonlu/dataset/emot_emotion-twitter/valid_preprocess.csv')
 
-    train[['clean', 'no_stopword_text']] = clean_tweet(train['tweet'])
-    test[['clean', 'no_stopword_text']] = clean_tweet(test['tweet'])
-
-    data = pd.concat([train, test])
-
-    tfidf_vect = TfidfVectorizer(max_features=5000)
-    tfidf_vect.fit(data['no_stopword_text'])
-    train_X_tfidf = tfidf_vect.transform(train['tweet'])
-    test_X_tfidf = tfidf_vect.transform(test['label'])
-
-    model = SVC(kernel='linear')
-    model.fit(train_X_tfidf, train['label'])
-    predictions_SVM = model.predict(test_X_tfidf)
-    test['Prediction'] = predictions_SVM
-
-    pickle.dump(model, open(PATH + '/emot_tf-idf_model.sav', 'wb'))
-    pickle.dump(tfidf_vect, open(PATH + "/emot_tfidf.pickle", "wb"))
-    # End Create Model
-
-def scrap(count, query, since, until):
+def scrap(keyword, since, until):
     global model
-    KEYWORD = query
-    # Setting variables to be used in format string command below
-    tweet_count = count
-    text_query = KEYWORD + " lang:id include:nativeretweets"  # kata kunci yang digunakan untuk search di twitter
+
+    ACC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1CJi2jAKog-cgxvIJeTkxKSUri2qm9fUJpkMQr1xqEXk/export?format=csv&gid=0'
+    response = requests.get(ACC_SHEET_URL)
+    open("list_accounts.csv", "wb").write(response.content)
+    account_df = pd.read_csv(PATH + '/list_accounts.csv', header=None, names=['account'])
+    account_df = account_df['account'].values.tolist()
+
     PROJECT_NAME = "data"
     since_date = since
     until_date = until
 
-    # Using OS library to call CLI commands in Python
-    os.system(
-        "snscrape --jsonl --max-results {} twitter-search '{} since:{} until:{}'> {}_scrap.json".format(tweet_count,
-                                                                                                        text_query,
-                                                                                                        since_date,
-                                                                                                        until_date,
-                                                                                                        PROJECT_NAME))
-    data_df = pd.read_json(f'{PROJECT_NAME}_scrap.json', lines=True)
+    data_df = pd.DataFrame()
 
-    # get username twitter from 'user'
-    users = []
-    # dataframe['column_name'] = dataframe['column_name'].fillna('').apply(str)
-    user_prop = data_df['user'].fillna('').apply(str)
-    i = 0
-    for x in user_prop:
-        i += 1
-        if x != '' and re.search('({.+})', x) != None:
-            dicti = ast.literal_eval(re.search('({.+})', x).group(0))
-            users.append(dicti['username'])
-        else:
-            users.append('')
+    for account in account_df:
+        text_query = f'{keyword} from:{account} include:nativeretweets'
+        os.system("snscrape --jsonl twitter-search '{} since:{} until:{}'> {}_scrap.json".format(text_query, since_date,
+                                                                                                 until_date,
+                                                                                                 PROJECT_NAME))
+        new_data_df = pd.read_json(f'{PROJECT_NAME}_scrap.json', lines=True)
+        data_df = pd.concat([data_df, new_data_df])
 
-    data_df['username'] = users
+    if data_df.empty:
+        return False
+    else:
+        mask = data_df.content.str.contains("RT @")
+        data_df1 = data_df[mask]
+        data_df2 = data_df[~mask]
 
-    data_df[['clean', 'no_stopword_text']] = clean_tweet(data_df['content'])
+        data_df2['clean_text'] = clean_tweet(data_df2['content'])
 
-    # Create Model
-    if model == 0:
-        create_model()
-        model = 1
+        # Create Model
+        # if model == 0:
+        #     create_model()
+        #     model = 1
 
-    loaded_tfidf = pickle.load(open(PATH + '/emot_tfidf.pickle', 'rb'))
-    loaded_model = pickle.load(open(PATH + '/emot_tf-idf_model.sav', 'rb'))
+        loaded_tfidf = pickle.load(open(PATH + '/emot_tfidf.pickle', 'rb'))
+        loaded_model = pickle.load(open(PATH + '/emot_tf-idf_model.sav', 'rb'))
 
-    # load dataset
-    test_data = data_df
+        # load dataset
+        test_data = data_df2
 
-    # some preprocessing and setup
-    test_data['no_stopword_text'].fillna('0', inplace=True)
-    X_tfidf = loaded_tfidf.transform(test_data['no_stopword_text'])  # TF-IDF
+        # some preprocessing and setup
+        test_data['clean_text'].fillna('0', inplace=True)
+        X_tfidf = loaded_tfidf.transform(test_data['clean_text'])  # TF-IDF
 
-    # Proses Pengujian
-    predictions_SVM = loaded_model.predict(X_tfidf)
-    test_data['prediction'] = predictions_SVM
+        # Proses Pengujian
+        predictions_SVM = loaded_model.predict(X_tfidf)
+        test_data['prediction'] = predictions_SVM
 
-    most_tweet = test_data[['username', 'url','likeCount', 'retweetCount']].sort_values('retweetCount',ascending=False).head(10)
+        most_tweet = test_data[['url', 'prediction', 'likeCount', 'retweetCount']].sort_values('retweetCount',
+                                                                                               ascending=False).head(10)
 
-    word_count = Counter(" ".join(test_data['no_stopword_text']).split()).most_common(10)
-    frequency = pd.DataFrame(word_count, columns=['Word', 'Frequency']).to_json(orient="columns")
-    frequency_word = list(json.loads(frequency)['Word'].values())
-    frequency_freq = list(json.loads(frequency)['Frequency'].values())
+        word_count = Counter(" ".join(test_data['clean_text']).split()).most_common(10)
+        frequency = pd.DataFrame(word_count, columns=['Word', 'Frequency']).to_json(orient="columns")
+        frequency_word = list(json.loads(frequency)['Word'].values())
+        frequency_freq = list(json.loads(frequency)['Frequency'].values())
 
-    hashtag = pd.notnull(test_data['hashtags'])
-    ht_data = test_data[hashtag]
-    ht_data['hashtags'] = ht_data['hashtags'].str.join(" ")
-    word_text = " ".join(ht_data['hashtags'])
-    emotions = data_df["prediction"].value_counts().to_json(orient="records")
-    print(most_tweet.values.tolist())
-    output_data = {}
-    output_data['most_retweet'] = most_tweet.values.tolist()
-    output_data['frequency_word'] = frequency_word
-    output_data['frequency_freq'] = frequency_freq
-    output_data['hashtag_wordcloud'] = word_text
-    output_data['emotions'] = emotions
+        hashtag = pd.notnull(test_data['hashtags'])
+        ht_data = test_data[hashtag]
+        ht_data['hashtags'] = ht_data['hashtags'].str.join(" ")
+        word_text = " ".join(ht_data['hashtags'])
+        emotions = test_data["prediction"].value_counts().to_json(orient="records")
 
-    return output_data
+        quot_df = data_df1
 
+        src_list = []
+        for index, row in quot_df.iterrows():
+            src_user = row['retweetedTweet']['user']['username']
+            src_list.append(src_user)
+
+        tgt_list = []
+        for index, row in quot_df.iterrows():
+            tgt_user = row['user']['username']
+            tgt_list.append(tgt_user)
+
+        network_df = pd.DataFrame()
+        network_df['source'] = src_list
+        network_df['target'] = tgt_list
+
+        sna_data = {}
+        sna_data['nodes'] = []
+        sna_data['edges'] = []
+
+        list_accounts = remove_duplicate(src_list, tgt_list)
+        for account in list_accounts:
+            sna_data['nodes'].append({'id': account})
+        for i in range(0, len(src_list)):
+            sna_data['edges'].append({'from': src_list[i], 'to': tgt_list[i]})
+        # print(test_data[['username']].values.tolist())
+        print(test_data.columns.tolist())
+
+        sna_json = json.dumps(sna_data).encode('utf-8')
+        open(PATH + "/static/sna.json", "wb").write(sna_json)
+
+        output_data = {}
+        output_data['most_retweet'] = most_tweet.values.tolist()
+        output_data['frequency_word'] = frequency_word
+        output_data['frequency_freq'] = frequency_freq
+        output_data['hashtag_wordcloud'] = word_text
+        output_data['emotions'] = emotions
+
+        return output_data
 
 
 @app.route('/', methods=['GET', 'POST'])
 def index():  # put application's code here
-    status = 0
-    output = ''
     # If request method is POST, here
     if request.method == 'POST':
-        status = 1
         form_data = request.form
-        query = form_data.get('keyword')
-        count = form_data.get('tweet_count')
+
+        keyword = form_data.get('keyword')
+
+        if len(keyword) == 0:
+            keyword = ''
+
         since = form_data.get('since')
         until = form_data.get('until')
-        output_data = scrap(count,query,since,until)
-        return render_template('index.html', output=output, status=status, output_data = output_data)
+        output_data = scrap(keyword, since, until)
+        return render_template('index.html', output_data=output_data)
     # If request method is GET, here
     else:
-        return render_template('index.html', status=status)
-    # return render_template('index.html', status=status)
+        keyword = ''
+        today = date.today()
+        until = today.strftime("%Y-%m-%d")
+        since = today - timedelta(days=7)
+        output_data = scrap(keyword, since, until)
+        return render_template('index.html', output_data=output_data)
+
+
 if __name__ == '__main__':
     app.run(port=8000)
