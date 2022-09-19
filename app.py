@@ -151,9 +151,9 @@ def clean_tweet(text):
 def scrap(keyword, since, until):
     global model
 
-    ACC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1CJi2jAKog-cgxvIJeTkxKSUri2qm9fUJpkMQr1xqEXk/export?format=csv&gid=0'
-    response = requests.get(ACC_SHEET_URL)
-    open("list_accounts.csv", "wb").write(response.content)
+    # ACC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1CJi2jAKog-cgxvIJeTkxKSUri2qm9fUJpkMQr1xqEXk/export?format=csv&gid=0'
+    # response = requests.get(ACC_SHEET_URL)
+    # open("list_accounts.csv", "wb").write(response.content)
     account_df = pd.read_csv(PATH + '/list_accounts.csv', header=None, names=['account'])
     account_df = account_df['account'].values.tolist()
 
@@ -201,16 +201,49 @@ def scrap(keyword, since, until):
 
         most_tweet = test_data[['url', 'prediction', 'likeCount', 'retweetCount']].sort_values('retweetCount',
                                                                                                ascending=False).head(10)
+        redundant_word = [
+            'yogyakarta',
+            'jogja',
+            'sleman',
+            'bantul',
+            'gunungkidul',
+            'kulonprogo',
+            'beritajogja',
+            'diy',
+            'indonesia',
+            'jogjaistimewa',
+            'JogjaIstimewa',
+            '2022',
+            'september',
+            'kota',
+            'daerah',
+            'via'
+        ]
+        word_list = " ".join(test_data['clean_text']).split()
+        for word in redundant_word:
+            word_list = list(filter(lambda a: a != word, word_list))
+        for word in word_list:
+            if word.isnumeric():
+                word_list.remove(word)
 
-        word_count = Counter(" ".join(test_data['clean_text']).split()).most_common(10)
+        word_count = Counter(word_list).most_common(10)
         frequency = pd.DataFrame(word_count, columns=['Word', 'Frequency']).to_json(orient="columns")
         frequency_word = list(json.loads(frequency)['Word'].values())
         frequency_freq = list(json.loads(frequency)['Frequency'].values())
 
         hashtag = pd.notnull(test_data['hashtags'])
         ht_data = test_data[hashtag]
-        ht_data['hashtags'] = ht_data['hashtags'].str.join(" ")
-        word_text = " ".join(ht_data['hashtags'])
+        if ht_data.empty:
+            ht_data['hashtags'] = []
+        else:
+            ht_data['hashtags'] = ht_data['hashtags'].str.join(" ")
+
+        ht_text = " ".join(ht_data['hashtags'])
+        ht_list = ht_text.split()
+        for ht in redundant_word:
+            ht_list = list(filter(lambda a: a != ht, ht_list))
+        ht_text = " ".join(ht_list)
+
         emotions = test_data["prediction"].value_counts().to_json(orient="records")
 
         quot_df = data_df1
@@ -238,8 +271,6 @@ def scrap(keyword, since, until):
             sna_data['nodes'].append({'id': account})
         for i in range(0, len(src_list)):
             sna_data['edges'].append({'from': src_list[i], 'to': tgt_list[i]})
-        # print(test_data[['username']].values.tolist())
-        print(test_data.columns.tolist())
 
         sna_json = json.dumps(sna_data).encode('utf-8')
         open(PATH + "/static/sna.json", "wb").write(sna_json)
@@ -248,7 +279,7 @@ def scrap(keyword, since, until):
         output_data['most_retweet'] = most_tweet.values.tolist()
         output_data['frequency_word'] = frequency_word
         output_data['frequency_freq'] = frequency_freq
-        output_data['hashtag_wordcloud'] = word_text
+        output_data['hashtag_wordcloud'] = ht_text
         output_data['emotions'] = emotions
 
         return output_data
