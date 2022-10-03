@@ -244,8 +244,15 @@ def scrap(keyword, since, until):
             ht_list = list(filter(lambda a: a != ht, ht_list))
         ht_text = " ".join(ht_list)
 
-        emotions = test_data["prediction"].value_counts().to_json(orient="records")
-
+        tweet_count = len(data_df2.index)
+        emotions_values = test_data["prediction"].value_counts()
+        emotions_percentage = []
+        for index_emot in range(5):
+            if index_emot > len(test_data["prediction"].value_counts()) - 1:
+                emotions_percentage.append(0)
+            else:
+                val = emotions_values[index_emot]/tweet_count*100
+                emotions_percentage.append(round(val, 1))
         quot_df = data_df1
 
         src_list = []
@@ -280,7 +287,8 @@ def scrap(keyword, since, until):
         output_data['frequency_word'] = frequency_word
         output_data['frequency_freq'] = frequency_freq
         output_data['hashtag_wordcloud'] = ht_text
-        output_data['emotions'] = emotions
+        output_data['emotions'] = emotions_percentage
+        output_data['tweet_count'] = tweet_count
 
         return output_data
 
@@ -299,7 +307,7 @@ def index():  # put application's code here
         since = form_data.get('since')
         until = form_data.get('until')
         output_data = scrap(keyword, since, until)
-        return render_template('index.html', output_data=output_data)
+        return render_template('index.html', output_data=output_data, keyword=keyword, since=since, until=until)
     # If request method is GET, here
     else:
         keyword = ''
@@ -307,7 +315,7 @@ def index():  # put application's code here
         until = today.strftime("%Y-%m-%d")
         since = today - timedelta(days=7)
         output_data = scrap(keyword, since, until)
-        return render_template('index.html', output_data=output_data)
+        return render_template('index.html', output_data=output_data, keyword='Tidak Ada', since=since, until=until)
 
 
 if __name__ == '__main__':
