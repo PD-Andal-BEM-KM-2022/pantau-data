@@ -165,7 +165,7 @@ def scrap(keyword, since, until):
 
     for account in account_df:
         text_query = f'{keyword} from:{account} include:nativeretweets'
-        os.system("snscrape --jsonl twitter-search '{} since:{} until:{}'> {}_scrap.json".format(text_query, since_date,
+        os.system("snscrape --jsonl  twitter-search  \"{} since:{} until:{}\"> {}_scrap.json".format( text_query, since_date,
                                                                                                  until_date,
                                                                                                  PROJECT_NAME))
         new_data_df = pd.read_json(f'{PROJECT_NAME}_scrap.json', lines=True)
@@ -300,9 +300,8 @@ def index():  # put application's code here
         form_data = request.form
 
         keyword = form_data.get('keyword')
-
         if len(keyword) == 0:
-            keyword = ''
+             keyword = ''
 
         since = form_data.get('since')
         until = form_data.get('until')
